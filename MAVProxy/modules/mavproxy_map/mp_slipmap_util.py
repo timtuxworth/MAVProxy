@@ -605,7 +605,13 @@ class SlipIcon(SlipThumbnail):
         img[py:py + h, px:px + w] = cv2.add(img[py:py+h, px:px+w], icon[sy:sy+h, sx:sx+w])
 
         if self.label is not None:
-            cv2.putText(img, self.label, (px, py), font, 1.0, self.colour)
+            # cv2.putText(img, self.label, (px, py), font, 1.0, self.colour)
+            # Split the label into lines and render each individually
+            y_offset = py
+            line_height = 25  # Adjust this value based on your font size
+            for line in self.label.split('\n'):
+                cv2.putText(img, line, (px, y_offset), font, 0.8, self.colour)
+                y_offset += line_height 
 
         # remember where we placed it for clicked()
         self.posx = px+w//2

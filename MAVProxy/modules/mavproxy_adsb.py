@@ -265,9 +265,14 @@ class ADSBModule(mp_module.MPModule):
                                                         trail=mp_slipmap.SlipTrail(colour=(0, 255, 255)),
                                                         popup_menu=popup))
                 if threat_radius > 0:
+                    linewidth = 1
+                    if threat_radius > 100:
+                        linewidth = 2
+                    if emitter_type < 14 or emitter_type == 100:
+                        linewidth = 3
                     mp.map.add_object(mp_slipmap.SlipCircle(id+":circle", 3,
                                                         (lat * 1e-7, lon * 1e-7),
-                                                        threat_radius, (0, 255, 255), linewidth=1))
+                                                        threat_radius, (0, 255, 255), linewidth=linewidth))
         else:  # the vehicle is in the dict
             # update the dict entry
             self.threat_vehicles[id].update(state, self.get_time())
@@ -287,18 +292,18 @@ class ADSBModule(mp_module.MPModule):
             alt_amsl = altitude_km * 0.001
             color = ImageColor.getrgb(self.ADSB_settings.alt_color1)
             label = ""
-            if self.ADSB_settings.show_callsign and (emitter_type < 14 or emitter_type == 100 or emitter_type == 101):
-                label = "[%s] " % callsign.rstrip()
             if alt_amsl > 0:
                 alt = int(alt_amsl - ref_alt)
-                label += self.height_string(alt)
-                label += " (AMSL: %s) " % self.height_string(alt_amsl)
+                label += " %s" % self.height_string(alt)
+                label += " (%s AMSL)" % self.height_string(alt_amsl)
                 if abs(dist) < get_threat_radius(emitter_type, squawk) and abs(alt) < get_threat_height(emitter_type):
                     tnow = self.get_time()
                     if self.ADSB_settings.traffic_warning and tnow - self.last_traffic > 5:
                         self.last_traffic = tnow
                         self.say("traffic")
                     color = ImageColor.getrgb(self.ADSB_settings.alt_color2)
+            if self.ADSB_settings.show_callsign and (emitter_type < 14 or emitter_type == 100 or emitter_type == 101):
+                label += "\n    [%s] " % callsign.rstrip()
 
             mp.map.set_position(id, (lat_deg, lon_deg), rotation=heading*0.01, label=label, colour=color)
             mp.map.set_position(id+":circle", (lat_deg, lon_deg))
