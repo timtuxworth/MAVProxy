@@ -48,7 +48,7 @@ def get_threat_radius(emitter_type, squawk):
     if emitter_type < 14:
         ''' adsb emitters for all crude vehicles are < 14 (UAV) '''
         return 609.6
-    '''get threat height for an OBC item'''
+    '''get threat radius for an OBC item'''
     return obc_radius.get(emitter_type,609.6)
 
 def get_threat_height(emitter_type):
@@ -95,6 +95,7 @@ class ADSBVehicle(object):
         self.v_distance = None
         self.h_distance = None
         self.distance = None
+        self.inner_circle = False
 
     def update(self, state, tnow):
         '''update the threat state'''
@@ -113,6 +114,7 @@ class ADSBModule(mp_module.MPModule):
                          ["<status>", "set (ADSBSETTING)"])
 
         self.ADSB_settings = mp_settings.MPSettings([("timeout", int, 5),  # seconds
+                                                     ("inner_radius", int, -1),  # meters
                                                      ("threat_radius", int, 200),  # meters
                                                      ("show_threat_radius", bool, False),
                                                      # threat_radius_clear = threat_radius*threat_radius_clear_multiplier
@@ -226,6 +228,7 @@ class ADSBModule(mp_module.MPModule):
                     # remove the threat from the map
                     mp.map.remove_object(id)
                     mp.map.remove_object(id+":circle")
+                    mp.map.remove_object(id+":innercircle")
                 # we've modified the dict we're iterating over, so
                 # we'll get any more timed-out threats next time we're
                 # called:
@@ -265,9 +268,19 @@ class ADSBModule(mp_module.MPModule):
                                                         trail=mp_slipmap.SlipTrail(colour=(0, 255, 255)),
                                                         popup_menu=popup))
                 if threat_radius > 0:
+                    linewidth = 1
+                    if threat_radius > 200:
+                        linewidth = 2
+                    if emitter_type < 14 or emitter_type == 100:
+                        linewidth = 3
                     mp.map.add_object(mp_slipmap.SlipCircle(id+":circle", 3,
                                                         (lat * 1e-7, lon * 1e-7),
-                                                        threat_radius, (0, 255, 255), linewidth=1))
+                                                        threat_radius, (0, 255, 255), linewidth=linewidth))
+                    if emitter_type < 14 or emitter_type == 100:
+                        self.threat_vehicles[id].inner_circle = True
+                        mp.map.add_object(mp_slipmap.SlipCircle(id+":innercircle", 4,
+                                                        (lat * 1e-7, lon * 1e-7),
+                                                        500 * 0.3048, (255, 0, 0), linewidth=2))
         else:  # the vehicle is in the dict
             # update the dict entry
             self.threat_vehicles[id].update(state, self.get_time())
@@ -287,21 +300,27 @@ class ADSBModule(mp_module.MPModule):
             alt_amsl = altitude_km * 0.001
             color = ImageColor.getrgb(self.ADSB_settings.alt_color1)
             label = ""
-            if self.ADSB_settings.show_callsign and (emitter_type < 14 or emitter_type == 100 or emitter_type == 101):
-                label = "[%s] " % callsign.rstrip()
+            #if self.ADSB_settings.show_callsign and (emitter_type < 14 or emitter_type == 100 or emitter_type == 101):
+            #    label = "[%s] " % callsign.rstrip()
             if alt_amsl > 0:
                 alt = int(alt_amsl - ref_alt)
-                label += self.height_string(alt)
-                label += " (AMSL: %s) " % self.height_string(alt_amsl)
+                # label += self.height_string(alt)
+                label += " %s" % self.height_string(alt)
+                label += " (%s AMSL)" % self.height_string(alt_amsl)
                 if abs(dist) < get_threat_radius(emitter_type, squawk) and abs(alt) < get_threat_height(emitter_type):
                     tnow = self.get_time()
                     if self.ADSB_settings.traffic_warning and tnow - self.last_traffic > 5:
                         self.last_traffic = tnow
                         self.say("traffic")
                     color = ImageColor.getrgb(self.ADSB_settings.alt_color2)
+            if self.ADSB_settings.show_callsign and (emitter_type < 14 or emitter_type == 100 or emitter_type == 101):
+                label += "\n    [%s] " % callsign.rstrip()
 
             mp.map.set_position(id, (lat_deg, lon_deg), rotation=heading*0.01, label=label, colour=color)
             mp.map.set_position(id+":circle", (lat_deg, lon_deg))
+            if self.threat_vehicles[id].inner_circle:
+                mp.map.set_position(id+":innercircle", (lat_deg, lon_deg))
+
 
     def mavlink_packet(self, m):
         '''handle an incoming mavlink packet'''
